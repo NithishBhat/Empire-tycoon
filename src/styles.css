@@ -72,7 +72,9 @@ body {
 /* ---------- compact sticky topbar: cash is still the hero, always visible ---------- */
 .topbar {
   flex: 0 0 auto; z-index: 20;      /* zone 1 — fixed basis, never scrolls */
-  display: grid; grid-template-columns: auto 1fr auto; gap: 14px; align-items: center;
+  /* cash (left, flexes) · actions (right). The centre nav is retired, so this is a
+     clean 2-column bar — the actions pin to the right edge instead of drifting. */
+  display: grid; grid-template-columns: 1fr auto; gap: 12px; align-items: center;
   background: rgba(11,11,13,.88); backdrop-filter: blur(18px);
   border-bottom: 1px solid #26262a;
   padding: 10px 20px; padding-top: calc(10px + env(safe-area-inset-top, 0px));
@@ -95,25 +97,63 @@ body {
 }
 .icon-btn.on { border-color: var(--accent); box-shadow: 0 0 12px rgba(48,209,88,.25); }
 
-/* music control: icon + slide-out volume */
-.music-control { display: flex; align-items: center; gap: 0; }
-.music-control .vol-slider {
-  width: 0; opacity: 0; transition: width .22s ease, opacity .22s ease, margin .22s ease;
-  accent-color: var(--accent); margin-left: 0;
-}
-.music-control:hover .vol-slider, .music-control.on .vol-slider { width: 78px; opacity: 1; margin-left: 8px; }
-.skip-btn { font-size: var(--fs-lg); margin-left: 6px; }
+.icon-btn.active { border-color: var(--accent); background: var(--card2); }
 
-/* now-playing chip */
-.nowplaying {
-  display: inline-flex; align-items: center; gap: 10px; cursor: pointer;
-  background: var(--card); border: 1px solid #2c2c30; border-radius: var(--r-pill);
-  padding: 8px 14px; margin-bottom: 12px; font-size: var(--fs-sm); color: var(--muted);
+/* bell: a pulse ring while there are unread notifications, so arrivals are noticeable
+   without having to squint at the tiny badge */
+.icon-btn.has-unread { border-color: var(--red); }
+.icon-btn.has-unread::after {
+  content: ''; position: absolute; inset: -3px; border-radius: 50%;
+  border: 2px solid var(--red); pointer-events: none;
+  animation: bellPulse 1.8s ease-out infinite;
 }
-.nowplaying:hover { border-color: var(--accent); }
-.nowplaying b { color: var(--text); }
-.np-skip { color: var(--muted); font-size: var(--fs-md); }
-.np-eq { display: inline-flex; align-items: flex-end; gap: 2px; height: 13px; }
+@keyframes bellPulse { 0% { transform: scale(1); opacity: .55; } 100% { transform: scale(1.4); opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .icon-btn.has-unread::after { animation: none; } }
+
+/* ---------- topbar dropdown menus (notifications + audio) ----------
+   Anchored just under the topbar on the right, next to their trigger icons — so a
+   notification opens where you're looking, not at the bottom of the screen. */
+.menu-scrim { position: fixed; inset: 0; z-index: 15; }   /* click-away; below topbar(20), above content */
+.topbar-menu {
+  /* align to the centred #root's right edge (not the raw viewport) so on wide
+     screens the dropdown stays under the bell instead of drifting to the corner */
+  position: fixed; top: calc(58px + env(safe-area-inset-top, 0px)); z-index: 60;
+  right: max(12px, calc((100vw - 1100px) / 2 + 12px));
+  width: min(340px, calc(100vw - 24px)); max-height: min(70vh, 520px); overflow-y: auto;
+  background: var(--card); border: 1px solid #3a3a3e; border-radius: var(--r-lg); padding: 10px;
+  box-shadow: 0 18px 50px rgba(0,0,0,.5);
+  display: flex; flex-direction: column; gap: 6px;
+  animation: menuDrop .18s cubic-bezier(.2,.8,.2,1);
+}
+@keyframes menuDrop { from { opacity: 0; transform: translateY(-8px); } to { opacity: 1; transform: translateY(0); } }
+.menu-head { padding: 2px 6px 8px; border-bottom: 1px solid #2c2c2e; margin-bottom: 2px; }
+.menu-head b { font-size: var(--fs-lg); }
+.menu-sub { font-size: var(--fs-xs); color: var(--muted); }
+.menu-empty { padding: 16px 6px; color: var(--muted); font-size: var(--fs-sm); text-align: center; }
+
+/* audio menu */
+.menu-row {
+  display: flex; align-items: center; gap: 10px; width: 100%;
+  background: var(--card2); border: 0; border-radius: var(--r-md); padding: 12px 14px;
+  color: var(--text); font-size: var(--fs-md); font-weight: 700; cursor: pointer; text-align: left;
+  transition: filter .12s ease;
+}
+.menu-row:hover { filter: brightness(1.12); }
+.menu-row .mr-ico { font-size: var(--fs-lg); }
+.menu-now {
+  display: flex; align-items: center; gap: 10px; padding: 10px 12px;
+  background: rgba(48,209,88,.08); border-radius: var(--r-md);
+}
+.menu-now-txt { display: flex; flex-direction: column; line-height: 1.25; min-width: 0; flex: 1; }
+.menu-now-txt b { font-size: var(--fs-md); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.menu-now-txt span { font-size: var(--fs-xs); color: var(--muted); }
+.menu-skip { background: transparent; border: 0; color: var(--text); font-size: var(--fs-2xl); cursor: pointer; padding: 2px 4px; }
+.menu-vol { display: flex; align-items: center; gap: 10px; padding: 8px 12px 4px; }
+.menu-vol-lbl { font-size: var(--fs-sm); color: var(--muted); white-space: nowrap; }
+.menu-vol input { flex: 1; accent-color: var(--accent); }
+
+/* equalizer bars (now-playing indicator inside the audio menu) */
+.np-eq { display: inline-flex; align-items: flex-end; gap: 2px; height: 15px; }
 .np-eq i { width: 3px; background: var(--accent); border-radius: 1px; animation: eq 0.9s ease-in-out infinite; }
 .np-eq i:nth-child(1) { height: 40%; animation-delay: 0s; }
 .np-eq i:nth-child(2) { height: 90%; animation-delay: 0.3s; }
@@ -278,14 +318,6 @@ input[type=text]:focus, input[type=number]:focus {
   font-size: var(--fs-xs); font-weight: 800; min-width: 20px; height: 20px; border-radius: var(--r-md);
   display: flex; align-items: center; justify-content: center; padding: 0 4px;
 }
-.notif-panel {
-  position: fixed; top: 64px; right: 16px; z-index: 30; width: min(400px, calc(100vw - 32px));
-  max-height: 60vh; overflow-y: auto;
-  background: var(--card); border: 1px solid #3a3a3e; border-radius: var(--r-lg); padding: 10px;
-  box-shadow: 0 16px 50px rgba(0,0,0,.4);
-  display: flex; flex-direction: column; gap: 4px;
-}
-.notif-head { padding: 2px 6px 8px; border-bottom: 1px solid #2c2c2e; margin-bottom: 4px; }
 .notif {
   display: grid; grid-template-columns: 28px 1fr 14px; gap: 8px; align-items: center;
   background: transparent; border: 0; border-radius: var(--r-md); padding: 9px 8px;
@@ -579,10 +611,6 @@ button.bizrow:hover { border-color: #3a3a3e; }
   min-width: 15px; height: 15px; border-radius: var(--r-sm);
   display: flex; align-items: center; justify-content: center; padding: 0 3px;
 }
-/* on phones the notifications panel anchors to the bottom, clearing the tab bar */
-@media (max-width: 900px) {
-  .notif-panel { bottom: calc(84px + env(safe-area-inset-bottom, 0px)); top: auto; max-height: 50vh; }
-}
 
 /* ---------- large-text typography: tighter tracking + line-height ---------- */
 .det-price { letter-spacing: -.02em; line-height: 1.1; }
@@ -626,7 +654,6 @@ button:focus-visible,
   .tb-amount { font-size: var(--fs-4xl); }
   .tb-cash { min-width: 0; }
   .icon-btn { width: 38px; height: 38px; font-size: var(--fs-2xl); }
-  .music-control:hover .vol-slider, .music-control.on .vol-slider { width: 60px; }
 
   /* section titles: less shouting, tighter */
   .section-title { margin: 14px 2px 7px; }
@@ -790,6 +817,31 @@ button:focus-visible,
   padding: 12px; border-top: 1px solid #2c2c30;
 }
 .term-actionbar .btn { padding: 15px 16px; font-size: var(--fs-2xl); }
+
+/* ---------- mobile immersive trade screen (Coinbase / Robinhood pattern) ----------
+   On a phone, drilling into an asset hides the global tab bar and pins Buy/Sell to
+   the bottom, so the chart is the hero and the rest (stats · book · leverage) scrolls
+   beneath a persistent action bar. Desktop layout is untouched. */
+@media (max-width: 720px) {
+  .bottomnav.immersive { display: none; }
+  .content.immersive { padding-bottom: 0; }
+
+  /* the card clips its corners (overflow:hidden) which would trap a sticky child —
+     open it up on mobile so the action bar can pin against the scrolling .content. */
+  .terminal { overflow: visible; }
+
+  /* Buy/Sell: flex-order it visually last (nothing overlaps it) + stick to the
+     bottom of the scrollport so it's always reachable while everything scrolls. */
+  .terminal .term-actionbar {
+    order: 99;
+    position: sticky; bottom: 0; z-index: 6;
+    margin-top: 8px;
+    background: rgba(18,18,20,.96); backdrop-filter: blur(12px);
+    border-top: 1px solid #2c2c30;
+    border-radius: 0 0 var(--r-lg) var(--r-lg);
+    padding: 12px 12px calc(12px + env(safe-area-inset-bottom, 0px));
+  }
+}
 
 .sheet-scrim {
   position: fixed; inset: 0; z-index: 120;
