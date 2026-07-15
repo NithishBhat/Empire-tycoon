@@ -101,12 +101,21 @@ function CandleChart({ hist, min, max, overlays = [] }) {
   const [rangeId, setRangeId] = useState('1D')
   const [chartType, setChartType] = useState(() => localStorage.getItem('empire-charttype') || 'candle')
   const pickType = (t) => { setChartType(t); localStorage.setItem('empire-charttype', t) }
+  // On a phone the chart is the hero: a taller viewBox (≈1.8:1 vs desktop's 3.6:1)
+  // so it fills the top of the screen instead of rendering as a stubby strip.
+  const [narrow, setNarrow] = useState(() => typeof window !== 'undefined' && window.matchMedia('(max-width: 720px)').matches)
+  useEffect(() => {
+    const mq = window.matchMedia('(max-width: 720px)')
+    const on = () => setNarrow(mq.matches)
+    mq.addEventListener('change', on)
+    return () => mq.removeEventListener('change', on)
+  }, [])
   const range = CHART_RANGES.find(r => r.id === rangeId)
   const raw = range.raw === Infinity ? hist : hist.slice(-range.raw)
   const agg = range.agg || Math.max(1, Math.ceil(raw.length / 56))
   const candles = aggregate(raw, agg)
   const lastH = hist.length ? hist[hist.length - 1].h : 0
-  const W = 900, H = 250
+  const W = 900, H = narrow ? 500 : 250
   const padL = 6, padR = 62, padT = 12, padB = 18
   const iw = W - padL - padR, ih = H - padT - padB
 
@@ -201,7 +210,7 @@ function CandleChart({ hist, min, max, overlays = [] }) {
 }
 
 // ---------- markets: a list you browse, then push into a trade screen ----------
-export default function Markets({ state, dispatch, navTarget }) {
+export default function Markets({ state, dispatch, navTarget, onImmersiveChange }) {
   const [market, setMarket] = useState('stocks')  // list category: 'stocks' | 'crypto'
   const [trade, setTrade] = useState(null)         // { market:'stock'|'crypto'|'token', id } | null
 
@@ -214,6 +223,10 @@ export default function Markets({ state, dispatch, navTarget }) {
     if (!navTarget) return
     setTrade({ market: navTarget.market, id: navTarget.assetId })
   }, [navTarget?.nonce])
+
+  // a trade screen is a full-screen push → tell App to go immersive (hide bottom nav on mobile)
+  useEffect(() => { onImmersiveChange?.(!!trade) }, [trade])
+  useEffect(() => () => onImmersiveChange?.(false), [])
 
   const strip = useMemo(() => {
     let value = 0, spent = 0, divhr = 0, owned = 0

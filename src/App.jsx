@@ -84,7 +84,10 @@ export default function App() {
   const [music, setMusic] = useState(false)
   const [vol, setVol] = useState(getVolume())
   const [track, setTrack] = useState(null)
-  const [bellOpen, setBellOpen] = useState(false)
+  const [menu, setMenu] = useState(null) // null | 'bell' | 'audio' — one topbar dropdown at a time
+  // immersive = a full-screen trade screen is open; on mobile we hide the bottom
+  // tab bar (the pushed-screen pattern real trading apps use) to reclaim its space.
+  const [immersive, setImmersive] = useState(false)
 
   useEffect(() => { setOnTrackChange(setTrack) }, [])
   const [navTarget, setNavTarget] = useState(null) // { market, assetId, nonce }
@@ -107,12 +110,20 @@ export default function App() {
 
   const openNotif = (n) => {
     dispatch({ type: 'READ_NOTIF', id: n.id })
-    setToast(null); setBellOpen(false)
+    setToast(null); setMenu(null)
     if (n.target) {
       setTab('Stocks & Crypto')
       setNavTarget({ ...n.target, nonce: Date.now() })
     }
   }
+
+  // Esc closes an open topbar dropdown
+  useEffect(() => {
+    if (!menu) return
+    const onKey = (e) => { if (e.key === 'Escape') setMenu(null) }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [menu])
 
   const toggleMusic = () => {
     if (musicPlaying()) { stopMusic(); setMusic(false); localStorage.setItem('empire-music', '0') }
@@ -182,27 +193,24 @@ export default function App() {
           ))}
         </nav>
         <div className="tb-actions">
-          <button className="icon-btn" onClick={() => setBellOpen(o => !o)} title="Notifications">
+          <button className={`icon-btn${unread > 0 ? ' has-unread' : ''}${menu === 'bell' ? ' active' : ''}`}
+            onClick={() => setMenu(m => (m === 'bell' ? null : 'bell'))} title="Notifications" aria-label="Notifications">
             🔔{unread > 0 && <span className="bell-badge">{unread > 9 ? '9+' : unread}</span>}
           </button>
-          <div className={`music-control ${music ? 'on' : ''}`}>
-            <button className="icon-btn" onClick={toggleMusic} title={music ? 'Mute music' : 'Play music'}>
-              {music ? (vol === 0 ? '🔈' : '🔊') : '🔇'}
-            </button>
-            {music && <button className="icon-btn skip-btn" onClick={() => nextTrack()} title="Next track">⏭</button>}
-            <input className="vol-slider" type="range" min="0" max="1" step="0.05" value={vol}
-              title="Volume"
-              onChange={e => { const v = +e.target.value; setVol(v); setVolume(v); if (v > 0 && !musicPlaying()) toggleMusic() }} />
-          </div>
+          <button className={`icon-btn${music ? ' on' : ''}${menu === 'audio' ? ' active' : ''}`}
+            onClick={() => setMenu(m => (m === 'audio' ? null : 'audio'))} title="Audio" aria-label="Audio settings">
+            {music ? (vol === 0 ? '🔈' : '🔊') : '🔇'}
+          </button>
         </div>
       </header>
-      {bellOpen && (
-        <div className="notif-panel">
-          <div className="row notif-head">
+      {menu && <div className="menu-scrim" onClick={() => setMenu(null)} />}
+      {menu === 'bell' && (
+        <div className="topbar-menu" role="menu">
+          <div className="row menu-head">
             <b>Notifications</b>
-            <button className="btn small ghost" onClick={() => dispatch({ type: 'READ_ALL_NOTIFS' })}>Mark all read</button>
+            {unread > 0 && <button className="btn small ghost" onClick={() => dispatch({ type: 'READ_ALL_NOTIFS' })}>Mark all read</button>}
           </div>
-          {notifications.length === 0 && <div className="sub" style={{ padding: '10px 4px' }}>Quiet out there… for now.</div>}
+          {notifications.length === 0 && <div className="menu-empty">Quiet out there… for now.</div>}
           {notifications.map(n => (
             <button key={n.id} className={`notif ${n.read ? '' : 'unread'}`} onClick={() => openNotif(n)}>
               <span className="notif-icon">{n.icon}</span>
@@ -212,6 +220,30 @@ export default function App() {
           ))}
         </div>
       )}
+      {menu === 'audio' && (
+        <div className="topbar-menu" role="menu">
+          <div className="row menu-head">
+            <b>Audio</b>
+            <span className="menu-sub">{music ? (track ? 'Now playing' : 'Playing') : 'Muted'}</span>
+          </div>
+          <button className="menu-row" onClick={toggleMusic}>
+            <span className="mr-ico">{music ? '⏸' : '▶'}</span>
+            <span>{music ? 'Pause music' : 'Play music'}</span>
+          </button>
+          {music && track && (
+            <div className="menu-now">
+              <span className="np-eq"><i></i><i></i><i></i></span>
+              <div className="menu-now-txt"><b>{track.title}</b><span>{track.artist}</span></div>
+              <button className="menu-skip" onClick={() => nextTrack()} title="Next track">⏭</button>
+            </div>
+          )}
+          <div className="menu-vol">
+            <span className="menu-vol-lbl">🔉 Volume</span>
+            <input type="range" min="0" max="1" step="0.05" value={vol}
+              onChange={e => { const v = +e.target.value; setVol(v); setVolume(v); if (v > 0 && !musicPlaying()) toggleMusic() }} />
+          </div>
+        </div>
+      )}
       {toast && (
         <button className="toast" onClick={() => openNotif(toast)}>
           <span className="notif-icon">{toast.icon}</span>
@@ -219,7 +251,7 @@ export default function App() {
           {toast.target && <span className="sub">tap to trade ›</span>}
         </button>
       )}
-      <main className="content">
+      <main className={`content${immersive ? ' immersive' : ''}`}>
       {/* Goal Gradient — always visible, never 0%, one tap to the milestone ladder */}
       <button className="goalstrip" onClick={() => setTab('Empire')} title="View your milestones">
         <span className="goalstrip-lbl">
@@ -259,23 +291,16 @@ export default function App() {
           </div>
         </div>
       )}
-      {music && track && (
-        <div className="nowplaying" onClick={() => nextTrack()} title="Next track">
-          <span className="np-eq"><i></i><i></i><i></i></span>
-          <span>♪ <b>{track.title}</b> · {track.artist}</span>
-          <span className="np-skip">⏭</span>
-        </div>
-      )}
-
       {tab === 'Businesses' && <Businesses state={state} dispatch={dispatch} incomes={biz} />}
-      {tab === 'Stocks & Crypto' && <Markets state={state} dispatch={dispatch} navTarget={navTarget} />}
+      {tab === 'Stocks & Crypto' && <Markets state={state} dispatch={dispatch} navTarget={navTarget} onImmersiveChange={setImmersive} />}
       {tab === 'Real Estate' && <Estate state={state} dispatch={dispatch} />}
       {tab === 'Finances' && <Finances state={state} />}
       {tab === 'Empire' && <Empire state={state} dispatch={dispatch} nw={nw} />}
       </main>
 
-      {/* Zone 3 — bottom tab bar: the primary navigation at every width */}
-      <nav className="bottomnav">
+      {/* Zone 3 — bottom tab bar: the primary navigation at every width
+          (hidden on mobile while an immersive trade screen is open) */}
+      <nav className={`bottomnav${immersive ? ' immersive' : ''}`}>
         {TABS.map(t => (
           <button key={t.id} className={`bn-item ${t.id === tab ? 'active' : ''}`} onClick={() => setTab(t.id)}>
             <span className="bn-ind" />
