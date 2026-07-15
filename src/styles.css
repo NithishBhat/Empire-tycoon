@@ -11,21 +11,37 @@
   --radius: 16px;
 }
 * { box-sizing: border-box; margin: 0; }
+html, body { height: 100%; }
 body {
   background: var(--bg);
   color: var(--text);
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   -webkit-font-smoothing: antialiased;
+  overflow: hidden;                 /* the zone shell owns every scroll */
+  overscroll-behavior: none;
 }
-#root { max-width: 1100px; margin: 0 auto; padding: 0 16px 80px; }
+
+/* ---------- locked three-zone shell: header · scrollable middle · bottom bar ----------
+   Full dynamic-viewport height, flex column, no page scroll. The header and bottom
+   bar have a fixed basis; only .content flexes and scrolls. */
+#root {
+  max-width: 1100px; margin: 0 auto;
+  height: 100dvh;                   /* dvh, not vh — survives mobile chrome collapse */
+  display: flex; flex-direction: column; overflow: hidden;
+}
+.content {
+  flex: 1 1 auto; min-height: 0;    /* min-height:0 lets a flex child actually scroll */
+  overflow-y: auto; -webkit-overflow-scrolling: touch; overscroll-behavior: contain;
+  padding: 12px 16px 24px;
+}
 
 /* ---------- compact sticky topbar: cash is still the hero, always visible ---------- */
 .topbar {
-  position: sticky; top: 0; z-index: 20;
+  flex: 0 0 auto; z-index: 20;      /* zone 1 — fixed basis, never scrolls */
   display: grid; grid-template-columns: auto 1fr auto; gap: 14px; align-items: center;
   background: rgba(11,11,13,.88); backdrop-filter: blur(18px);
   border-bottom: 1px solid #26262a;
-  padding: 10px 4px; margin: 0 -16px 14px; padding-left: 20px; padding-right: 20px;
+  padding: 10px 20px; padding-top: calc(10px + env(safe-area-inset-top, 0px));
 }
 .tb-cash { display: flex; flex-direction: column; line-height: 1.15; min-width: 150px; }
 .tb-amount {
@@ -70,11 +86,8 @@ body {
 .np-eq i:nth-child(3) { height: 60%; animation-delay: 0.6s; }
 @keyframes eq { 0%, 100% { transform: scaleY(0.4); } 50% { transform: scaleY(1); } }
 
-@media (max-width: 900px) {
-  .topbar { grid-template-columns: 1fr auto; }
-  /* on narrow screens the bottom navigation replaces the centred top tabs */
-  .topbar .main-tabs { display: none; }
-}
+/* the bottom bar is the primary nav at every width — the centred top tabs are retired */
+.topbar .main-tabs { display: none; }
 
 .particles { position: absolute; inset: 0; pointer-events: none; }
 .float-plus {
@@ -317,12 +330,27 @@ button.btn.open-short { background: var(--red); color: #fff; }
 
 .tickers { display: flex; flex-direction: column; gap: 6px; }
 .ticker {
-  display: grid; grid-template-columns: 1fr auto auto 12px; gap: 10px; align-items: center;
+  display: grid; grid-template-columns: 1fr auto auto 16px; gap: 10px; align-items: center;
   background: var(--card); border: 1px solid transparent; border-radius: 12px;
   padding: 10px 12px; cursor: pointer; text-align: left; color: var(--text);
+  transition: transform .08s ease, border-color .12s ease;
 }
 .ticker:hover { border-color: #3a3a3e; }
+.ticker:active { transform: scale(.99); }
 .ticker.sel { border-color: var(--accent); background: #17251b; }
+.ticker .chev { color: #55555c; font-size: 15px; line-height: 1; text-align: center; }
+
+/* trade screen: a back bar drills you out to the market list */
+.trade-topbar { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+.tt-back {
+  display: inline-flex; align-items: center; gap: 3px;
+  background: var(--card); border: 1px solid #2c2c30; color: var(--text);
+  border-radius: 10px; padding: 9px 14px; font-size: 14px; font-weight: 700; cursor: pointer;
+  transition: border-color .12s ease, transform .08s ease;
+}
+.tt-back:hover { border-color: var(--accent); }
+.tt-back:active { transform: scale(.96); }
+.tt-title { font-size: 13px; font-weight: 700; color: var(--muted); font-variant-numeric: tabular-nums; }
 .tk-id b { font-size: 13.5px; display: block; }
 .tk-id > span { font-size: 11px; color: var(--muted); }
 .tk-price { text-align: right; }
@@ -481,47 +509,45 @@ button.bizrow:hover { border-color: #3a3a3e; }
   margin: 0 2px;
 }
 
-/* ---------- Bottom navigation (mobile) — full spec: 24px icons, 10–12px labels,
-   44px+ tap targets, safe-area inset, active state, sliding indicator, tap feedback ---------- */
-.bottomnav { display: none; }
+/* ---------- Zone 3 — bottom tab bar: primary nav at every width.
+   24px icons, 10–12px labels, 44px+ tap targets, safe-area inset, sliding indicator ---------- */
+.bottomnav {
+  flex: 0 0 auto; z-index: 50;      /* fixed basis at the base of the shell */
+  display: grid; grid-auto-flow: column; grid-auto-columns: 1fr;
+  background: rgba(18,18,20,.94); backdrop-filter: blur(20px);
+  border-top: 1px solid #2c2c30;
+  box-shadow: 0 -6px 30px rgba(0,0,0,.3);
+  padding: 6px 4px calc(6px + env(safe-area-inset-bottom, 0px));
+}
+.bn-item {
+  position: relative; display: flex; flex-direction: column; align-items: center;
+  justify-content: center; gap: 3px; min-height: 48px;
+  background: transparent; border: 0; cursor: pointer; color: var(--muted);
+  padding: 4px 2px; border-radius: 12px;
+  transition: transform .12s ease, color .15s ease;
+  -webkit-tap-highlight-color: transparent;
+}
+.bn-item:active { transform: scale(.88); }
+.bn-ico { font-size: 22px; line-height: 1; filter: grayscale(1) opacity(.65); transition: filter .18s ease, transform .18s ease; }
+.bn-label { font-size: 10.5px; font-weight: 600; letter-spacing: .01em; }
+.bn-item.active { color: var(--text); }
+.bn-item.active .bn-ico { filter: none; transform: translateY(-1px) scale(1.1); }
+.bn-item.active .bn-label { font-weight: 800; }
+.bn-ind {
+  position: absolute; top: 0; width: 24px; height: 3px; border-radius: 0 0 3px 3px;
+  background: var(--accent); opacity: 0; transform: scaleX(.3);
+  transition: opacity .22s ease, transform .22s ease;
+}
+.bn-item.active .bn-ind { opacity: 1; transform: scaleX(1); }
+.bn-badge {
+  position: absolute; top: 3px; left: calc(50% + 6px);
+  background: var(--red); color: #fff; font-size: 9px; font-weight: 800;
+  min-width: 15px; height: 15px; border-radius: 8px;
+  display: flex; align-items: center; justify-content: center; padding: 0 3px;
+}
+/* on phones the notifications panel anchors to the bottom, clearing the tab bar */
 @media (max-width: 900px) {
-  .bottomnav {
-    display: grid; grid-auto-flow: column; grid-auto-columns: 1fr;
-    position: fixed; left: 0; right: 0; bottom: 0; z-index: 50;
-    background: rgba(18,18,20,.94); backdrop-filter: blur(20px);
-    border-top: 1px solid #2c2c30;
-    box-shadow: 0 -6px 30px rgba(0,0,0,.3);
-    padding: 6px 4px calc(6px + env(safe-area-inset-bottom));
-  }
-  .bn-item {
-    position: relative; display: flex; flex-direction: column; align-items: center;
-    justify-content: center; gap: 3px; min-height: 48px;
-    background: transparent; border: 0; cursor: pointer; color: var(--muted);
-    padding: 4px 2px; border-radius: 12px;
-    transition: transform .12s ease, color .15s ease;
-    -webkit-tap-highlight-color: transparent;
-  }
-  .bn-item:active { transform: scale(.88); }
-  .bn-ico { font-size: 22px; line-height: 1; filter: grayscale(1) opacity(.65); transition: filter .18s ease, transform .18s ease; }
-  .bn-label { font-size: 10.5px; font-weight: 600; letter-spacing: .01em; }
-  .bn-item.active { color: var(--text); }
-  .bn-item.active .bn-ico { filter: none; transform: translateY(-1px) scale(1.1); }
-  .bn-item.active .bn-label { font-weight: 800; }
-  .bn-ind {
-    position: absolute; top: 0; width: 24px; height: 3px; border-radius: 0 0 3px 3px;
-    background: var(--accent); opacity: 0; transform: scaleX(.3);
-    transition: opacity .22s ease, transform .22s ease;
-  }
-  .bn-item.active .bn-ind { opacity: 1; transform: scaleX(1); }
-  .bn-badge {
-    position: absolute; top: 3px; left: calc(50% + 6px);
-    background: var(--red); color: #fff; font-size: 9px; font-weight: 800;
-    min-width: 15px; height: 15px; border-radius: 8px;
-    display: flex; align-items: center; justify-content: center; padding: 0 3px;
-  }
-  /* clear the fixed bar so content never hides behind it */
-  #root { padding-bottom: calc(78px + env(safe-area-inset-bottom)); }
-  .notif-panel { bottom: calc(84px + env(safe-area-inset-bottom)); top: auto; max-height: 50vh; }
+  .notif-panel { bottom: calc(84px + env(safe-area-inset-bottom, 0px)); top: auto; max-height: 50vh; }
 }
 
 /* ---------- large-text typography: tighter tracking + line-height ---------- */
@@ -541,7 +567,7 @@ button:focus-visible,
    designed for wider screens; tighten them so a phone shows real content.
    ====================================================================== */
 @media (max-width: 560px) {
-  #root { padding: 0 12px calc(84px + env(safe-area-inset-bottom)); }
+  .content { padding-left: 12px; padding-right: 12px; }
 
   /* list rows: keep everything on one line, clamp the blurb so a row can't
      balloon to 6 lines tall */
@@ -562,7 +588,7 @@ button:focus-visible,
   .social-count { font-size: 10.5px; }
 
   /* topbar hero stays punchy but doesn't crowd the actions */
-  .topbar { margin-left: -12px; margin-right: -12px; padding-left: 14px; padding-right: 14px; }
+  .topbar { padding-left: 14px; padding-right: 14px; }
   .tb-amount { font-size: 23px; }
   .tb-cash { min-width: 0; }
   .icon-btn { width: 38px; height: 38px; font-size: 16px; }
@@ -720,3 +746,38 @@ button:focus-visible,
   .th-stats { margin-left: 0; width: 100%; gap: 14px; }
   .th-price b { font-size: 20px; }
 }
+
+/* ======================================================================
+   Bottom sheets — the mobile-trading pattern. Buy/Sell/Leverage actions
+   slide up over a static base screen; drag-down or scrim-tap dismisses.
+   ====================================================================== */
+.term-actionbar {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 8px;
+  padding: 12px; border-top: 1px solid #2c2c30;
+}
+.term-actionbar .btn { padding: 15px 16px; font-size: 16px; }
+
+.sheet-scrim {
+  position: fixed; inset: 0; z-index: 120;
+  background: rgba(0,0,0,.5); backdrop-filter: blur(3px);
+  display: flex; align-items: flex-end; justify-content: center;
+  animation: fadeIn .18s ease;
+}
+.sheet {
+  width: 100%; max-width: 560px;
+  background: var(--card); border: 1px solid #2c2c30; border-bottom: 0;
+  border-radius: 22px 22px 0 0;
+  padding-bottom: calc(10px + env(safe-area-inset-bottom, 0px));
+  box-shadow: 0 -20px 60px rgba(0,0,0,.5);
+  max-height: 88dvh; display: flex; flex-direction: column;
+  animation: sheetUp .28s cubic-bezier(.2,.9,.3,1.1);
+}
+@keyframes sheetUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
+.sheet-grab { padding: 10px 0 4px; display: flex; justify-content: center; cursor: grab; touch-action: none; }
+.sheet-grab:active { cursor: grabbing; }
+.sheet-handle { width: 40px; height: 5px; border-radius: 3px; background: #4a4a4e; }
+.sheet-head { padding: 2px 18px 8px; font-size: 15px; font-weight: 800; letter-spacing: -.01em; }
+.sheet-body { padding: 0 2px 2px; overflow-y: auto; -webkit-overflow-scrolling: touch; }
+/* order entry sits flush inside the sheet — it already brings its own top border */
+.sheet-body .orderentry { border-top: 0; }
+.sheet-body .lever { margin: 0 12px 12px; }

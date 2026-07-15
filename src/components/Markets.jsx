@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { STOCKS, CRYPTOS, MARKET_STEP_H, LEV_MIN, LEV_MAX, POSITION_MIN_MARGIN, POSITION_FEE, RISK_LABELS } from '../game/data.js'
 import { positionPnl, liqPrice, tradeSlippage } from '../game/engine.js'
 import { fmt } from '../format.js'
+import Sheet from './Sheet.jsx'
 
 // terminal-style price: raw number with commas + sensible decimals (monospace columns)
 const fmtPx = (n) => n >= 1000 ? Math.round(n).toLocaleString()
@@ -199,30 +200,20 @@ function CandleChart({ hist, min, max, overlays = [] }) {
   )
 }
 
-// ---------- trading floor ----------
+// ---------- markets: a list you browse, then push into a trade screen ----------
 export default function Markets({ state, dispatch, navTarget }) {
-  const [market, setMarket] = useState('stocks')
-  const [selStock, setSelStock] = useState(STOCKS[0].id)
-  const [selCrypto, setSelCrypto] = useState(CRYPTOS[0].id)
-  const detailRef = useRef(null)
+  const [market, setMarket] = useState('stocks')  // list category: 'stocks' | 'crypto'
+  const [trade, setTrade] = useState(null)         // { market:'stock'|'crypto'|'token', id } | null
 
   const isStocks = market === 'stocks'
   const tokens = state.tokens || []
-  const sel = isStocks ? selStock : selCrypto
-  const setSel = (id) => {
-    (isStocks ? setSelStock : setSelCrypto)(id)
-    detailRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-  }
+  const positions = state.positions || []
 
-  // notification clicks land here: jump to the right market + asset
+  // notification clicks deep-link straight into the trade screen for that asset
   useEffect(() => {
     if (!navTarget) return
-    if (navTarget.market === 'stock') { setMarket('stocks'); setSelStock(navTarget.assetId) }
-    else { setMarket('crypto'); setSelCrypto(navTarget.assetId) }
-    setTimeout(() => detailRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50)
+    setTrade({ market: navTarget.market, id: navTarget.assetId })
   }, [navTarget?.nonce])
-
-  const selToken = !isStocks ? tokens.find(t => t.id === sel) : null
 
   const strip = useMemo(() => {
     let value = 0, spent = 0, divhr = 0, owned = 0
@@ -236,8 +227,10 @@ export default function Markets({ state, dispatch, navTarget }) {
     return { value, pnl: value - spent, divhr, owned }
   }, [state.stocks, state.cryptos])
 
-  const positions = state.positions || []
+  // ---- trade screen (full-view push): back bar + terminal for the chosen asset ----
+  if (trade) return <TradeScreen trade={trade} state={state} dispatch={dispatch} onBack={() => setTrade(null)} />
 
+  // ---- market list (the browsing surface): portfolio strip · category tabs · tappable rows ----
   return (
     <>
       <div className="floorstrip">
@@ -253,54 +246,79 @@ export default function Markets({ state, dispatch, navTarget }) {
 
       {positions.length > 0 && <PositionsStrip positions={positions} state={state} dispatch={dispatch} />}
 
-      <div className="floor">
-        <div className="tickers">
-          {!isStocks && tokens.map(t => {
-            const ch = changePct(t.hist)
-            const phase = TOKEN_PHASE[t.phase] || TOKEN_PHASE.stealth
-            return (
-              <button key={t.id} className={`ticker token ${sel === t.id ? 'sel' : ''}`} onClick={() => setSel(t.id)}>
-                <div className="tk-id">
-                  <b>${t.sym} <span className={`pill ${phase.cls}`}>{phase.pill}</span></b>
-                  <span>{t.name}</span>
-                </div>
-                <Spark hist={t.hist} />
-                <div className="tk-price">
-                  <b>{fmt(t.price)}</b>
-                  <span className={ch >= 0 ? 'up' : 'down'}>{ch >= 0 ? '▲' : '▼'} {Math.abs(ch).toFixed(1)}%</span>
-                </div>
-                {(t.owned > 0 || positions.some(p => p.assetId === t.id)) && <span className="holds">●</span>}
-              </button>
-            )
-          })}
-          {(isStocks ? STOCKS : CRYPTOS).map(d => {
-            const h = (isStocks ? state.stocks : state.cryptos)[d.id]
-            const ch = changePct(h.hist)
-            return (
-              <button key={d.id} className={`ticker ${sel === d.id ? 'sel' : ''}`} onClick={() => setSel(d.id)}>
-                <div className="tk-id">
-                  <b>{d.id}</b>
-                  <span>{d.name} <Risk risk={d.risk} /></span>
-                </div>
-                <Spark hist={h.hist} />
-                <div className="tk-price">
-                  <b>{fmt(h.price)}</b>
-                  <span className={ch >= 0 ? 'up' : 'down'}>{Math.abs(ch) >= 3 ? '🔥 ' : ''}{ch >= 0 ? '▲' : '▼'} {Math.abs(ch).toFixed(1)}%</span>
-                </div>
-                {(h.owned > 0 || positions.some(p => p.assetId === d.id)) && <span className="holds">●</span>}
-              </button>
-            )
-          })}
-        </div>
-
-        <div ref={detailRef} className="detail-anchor">
-          {isStocks
-            ? <AssetTerminal market="stock" def={STOCKS.find(s => s.id === sel)} h={state.stocks[sel]} state={state} dispatch={dispatch} />
-            : selToken
-              ? <TokenDetail t={selToken} state={state} dispatch={dispatch} />
-              : <AssetTerminal market="crypto" def={CRYPTOS.find(c => c.id === sel) || CRYPTOS[0]} h={state.cryptos[CRYPTOS.some(c => c.id === sel) ? sel : CRYPTOS[0].id]} state={state} dispatch={dispatch} />}
-        </div>
+      <div className="tickers">
+        {!isStocks && tokens.map(t => {
+          const ch = changePct(t.hist)
+          const phase = TOKEN_PHASE[t.phase] || TOKEN_PHASE.stealth
+          const held = t.owned > 0 || positions.some(p => p.assetId === t.id)
+          return (
+            <button key={t.id} className="ticker token" onClick={() => setTrade({ market: 'token', id: t.id })}>
+              <div className="tk-id">
+                <b>${t.sym} <span className={`pill ${phase.cls}`}>{phase.pill}</span></b>
+                <span>{t.name}</span>
+              </div>
+              <Spark hist={t.hist} />
+              <div className="tk-price">
+                <b>{fmt(t.price)}</b>
+                <span className={ch >= 0 ? 'up' : 'down'}>{ch >= 0 ? '▲' : '▼'} {Math.abs(ch).toFixed(1)}%</span>
+              </div>
+              {held ? <span className="holds">●</span> : <span className="chev">›</span>}
+            </button>
+          )
+        })}
+        {(isStocks ? STOCKS : CRYPTOS).map(d => {
+          const h = (isStocks ? state.stocks : state.cryptos)[d.id]
+          const ch = changePct(h.hist)
+          const held = h.owned > 0 || positions.some(p => p.assetId === d.id)
+          return (
+            <button key={d.id} className="ticker" onClick={() => setTrade({ market: isStocks ? 'stock' : 'crypto', id: d.id })}>
+              <div className="tk-id">
+                <b>{d.id}</b>
+                <span>{d.name} <Risk risk={d.risk} /></span>
+              </div>
+              <Spark hist={h.hist} />
+              <div className="tk-price">
+                <b>{fmt(h.price)}</b>
+                <span className={ch >= 0 ? 'up' : 'down'}>{Math.abs(ch) >= 3 ? '🔥 ' : ''}{ch >= 0 ? '▲' : '▼'} {Math.abs(ch).toFixed(1)}%</span>
+              </div>
+              {held ? <span className="holds">●</span> : <span className="chev">›</span>}
+            </button>
+          )
+        })}
       </div>
+    </>
+  )
+}
+
+// ---------- full trade screen: a back bar pushes you here from a list row ----------
+function TradeScreen({ trade, state, dispatch, onBack }) {
+  // land at the top of the screen, not wherever the list was scrolled
+  useEffect(() => { document.querySelector('.content')?.scrollTo({ top: 0 }) }, [])
+
+  let title, body
+  if (trade.market === 'stock') {
+    const def = STOCKS.find(s => s.id === trade.id) || STOCKS[0]
+    title = def.id
+    body = <AssetTerminal market="stock" def={def} h={state.stocks[def.id]} state={state} dispatch={dispatch} />
+  } else if (trade.market === 'token') {
+    const t = (state.tokens || []).find(x => x.id === trade.id)
+    title = t ? `$${t.sym}` : 'Token'
+    body = t
+      ? <TokenDetail t={t} state={state} dispatch={dispatch} />
+      : <div className="rugwarn dead">💀 This token is no longer listed — the pool is gone.</div>
+  } else {
+    const def = CRYPTOS.find(c => c.id === trade.id) || CRYPTOS[0]
+    title = def.id
+    body = <AssetTerminal market="crypto" def={def} h={state.cryptos[def.id]} state={state} dispatch={dispatch} />
+  }
+
+  return (
+    <>
+      <div className="trade-topbar">
+        <button className="tt-back" onClick={onBack}>‹ Markets</button>
+        <span className="tt-title">{title}</span>
+      </div>
+      {body}
     </>
   )
 }
@@ -489,9 +507,9 @@ function OrderBook({ price, depth, onPick }) {
 }
 
 // ---------- order entry rail: buy/sell · market/limit · percent · submit ----------
-function OrderEntry({ market, def, h, price, cash, dispatch, picked, isOwner }) {
+function OrderEntry({ market, def, h, price, cash, dispatch, picked, isOwner, initialSide = 'buy' }) {
   const isStock = market === 'stock'
-  const [side, setSide] = useState('buy')
+  const [side, setSide] = useState(initialSide)
   const [type, setType] = useState('market')
   const [limitPrice, setLimitPrice] = useState(price)
   const [usd, setUsd] = useState(1000)
@@ -596,6 +614,7 @@ function AssetTerminal({ market, def, h, state, dispatch }) {
   const isStock = market === 'stock'
   const [picked, setPicked] = useState(null)
   const [termView, setTermView] = useState('chart')
+  const [sheet, setSheet] = useState(null) // null | 'buy' | 'sell'
   const price = h.price
   const ch = windowPct(h.hist)
   const flash = useFlash(price)
@@ -640,7 +659,7 @@ function AssetTerminal({ market, def, h, state, dispatch }) {
       </div>
       <div className={`term-main show-${termView}`}>
         <div className="term-chart"><CandleChart hist={h.hist} min={def.min} max={def.max} overlays={overlays} /></div>
-        <div className="term-book"><OrderBook price={price} depth={def.depth} onPick={p => setPicked({ price: p, nonce: Date.now() })} /></div>
+        <div className="term-book"><OrderBook price={price} depth={def.depth} onPick={p => { setPicked({ price: p, nonce: Date.now() }); setSheet('buy') }} /></div>
       </div>
 
       <div className="det-stats">
@@ -653,11 +672,19 @@ function AssetTerminal({ market, def, h, state, dispatch }) {
         <div><span className="label">Exit impact</span><ExitCell value={value} depth={def.depth} /></div>
       </div>
 
-      <OrderEntry market={market} def={def} h={h} price={price} cash={state.cash} dispatch={dispatch} picked={picked} isOwner={isOwner} />
+      {/* action bar — Buy/Sell raise the order sheet; the leverage desk stays open below */}
+      <div className="term-actionbar">
+        <button className="btn buy" onClick={() => setSheet('buy')}>Buy</button>
+        <button className="btn sell" onClick={() => setSheet('sell')}>Sell</button>
+      </div>
 
       {myOrders.length > 0 && <OpenOrders orders={myOrders} dispatch={dispatch} price={price} />}
 
       <LeveragePanel market={market} assetId={def.id} price={price} cash={state.cash} dispatch={dispatch} positions={state.positions || []} />
+
+      <Sheet open={sheet === 'buy' || sheet === 'sell'} onClose={() => setSheet(null)} title={`${def.name} · ${fmtPx(price)}`}>
+        <OrderEntry market={market} def={def} h={h} price={price} cash={state.cash} dispatch={dispatch} picked={picked} isOwner={isOwner} initialSide={sheet === 'sell' ? 'sell' : 'buy'} />
+      </Sheet>
     </div>
   )
 }

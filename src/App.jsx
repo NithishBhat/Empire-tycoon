@@ -219,6 +219,7 @@ export default function App() {
           {toast.target && <span className="sub">tap to trade ›</span>}
         </button>
       )}
+      <main className="content">
       {/* Goal Gradient — always visible, never 0%, one tap to the milestone ladder */}
       <button className="goalstrip" onClick={() => setTab('Empire')} title="View your milestones">
         <span className="goalstrip-lbl">
@@ -271,8 +272,9 @@ export default function App() {
       {tab === 'Real Estate' && <Estate state={state} dispatch={dispatch} />}
       {tab === 'Finances' && <Finances state={state} />}
       {tab === 'Empire' && <Empire state={state} dispatch={dispatch} nw={nw} />}
+      </main>
 
-      {/* Mobile bottom navigation — replaces the top tabs under 760px */}
+      {/* Zone 3 — bottom tab bar: the primary navigation at every width */}
       <nav className="bottomnav">
         {TABS.map(t => (
           <button key={t.id} className={`bn-item ${t.id === tab ? 'active' : ''}`} onClick={() => setTab(t.id)}>
